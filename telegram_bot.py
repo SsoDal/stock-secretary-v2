@@ -49,12 +49,15 @@ def format_to_html(report_text: str, mode: str) -> str:
             html += "   (현재 추천 종목이 없습니다)\n\n"
             continue
         for item in items[:6]:
-            html += f"📌 <b>{item.get('종목명', 'N/A')}</b>\n"
+            name = item.get('종목명', 'N/A')
+            if name in ["N/A", "NA", "", None]:
+                name = "종목 추천 대기 중"
+            html += f"📌 <b>{name}</b>\n"
             html += f"   대장주: <b>{item.get('대장주', 'N/A')}</b>\n"
             html += f"   차등주: {item.get('차등주', 'N/A')}\n"
             html += f"   📈 상승 <b>{item.get('상승확률', 0)}%</b> | 📉 하락 <b>{item.get('하락확률', 0)}%</b> | ⚠️ 급락 <b>{item.get('급락확률', 0)}%</b>\n"
             html += f"   📥 외인·기관 유입 <b>{item.get('외인기관유입확률', 0)}%</b>\n"
-            html += f"   📋 상승요인: {item.get('상승요인', '')}\n"
+            html += f"   📋 상승요인: {item.get('상승요인', '뉴스 기반 분석 중')}\n"
             html += f"   🎯 목표가: {item.get('목표가', '미정')}\n"
             html += f"   📰 뉴스: {item.get('뉴스', '관련 뉴스 없음')}\n\n"
 

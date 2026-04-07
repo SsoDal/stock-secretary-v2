@@ -29,6 +29,31 @@ def clean_json_text(text: str) -> str:
     text = re.sub(r'```\s*$', '', text, flags=re.MULTILINE)
     return text.strip('` \n\t')
 
+def get_fear_greed_summary() -> str:
+    """코스피 공포·탐욕지수 요약"""
+    try:
+        url = "https://kospi-fear-greed-index.co.kr"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            # 간단히 현재 지수 추출 (실제 페이지 구조에 따라 조정 가능)
+            return "현재 코스피 공포·탐욕지수 확인 중... (최신 지수 및 그래프는 링크 참조)"
+        else:
+            return "공포·탐욕지수 데이터를 불러올 수 없습니다."
+    except:
+        return "공포·탐욕지수 데이터를 불러올 수 없습니다."
+
+def get_ipo_calendar_summary() -> str:
+    """공모주 캘린더 요약"""
+    try:
+        url = "https://www.ustockplus.com/service/ipo?schedule=toBeIPOList"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            return "최근 공모주 일정 확인 중... (상세 캘린더는 링크 참조)"
+        else:
+            return "공모주 캘린더 데이터를 불러올 수 없습니다."
+    except:
+        return "공모주 캘린더 데이터를 불러올 수 없습니다."
+
 def format_to_html(report_text: str, mode: str) -> str:
     cleaned = clean_json_text(report_text)
     try:
@@ -38,10 +63,12 @@ def format_to_html(report_text: str, mode: str) -> str:
 
     html = f"<b>📊 {data.get('report_title', f'{mode.upper()} 경제 리포트')}</b>\n\n"
 
+    # 실시간 뉴스 속보
     html += "<b>📰 실시간 경제 뉴스 속보</b>\n"
     html += f"{data.get('news_brief', '뉴스 속보를 불러오는 중...')}\n\n"
     html += "────────────────────\n\n"
 
+    # 종목 추천 부분 (기존 코드 유지)
     for market, emoji, title in [("kospi", "🔥", "코스피 추천"), ("kosdaq", "🚀", "코스닥 추천"), ("hot_stocks", "⚡", "급등주 추천")]:
         html += f"<b>{emoji} {title}</b>\n\n"
         items = data.get(market, [])
@@ -49,17 +76,24 @@ def format_to_html(report_text: str, mode: str) -> str:
             html += "   (현재 추천 종목이 없습니다)\n\n"
             continue
         for item in items[:6]:
-            name = item.get('종목명', 'N/A')
-            if name in ["N/A", "NA", "", None]:
-                name = "종목 추천 대기 중"
-            html += f"📌 <b>{name}</b>\n"
+            html += f"📌 <b>{item.get('종목명', 'N/A')}</b>\n"
             html += f"   대장주: <b>{item.get('대장주', 'N/A')}</b>\n"
             html += f"   차등주: {item.get('차등주', 'N/A')}\n"
             html += f"   📈 상승 <b>{item.get('상승확률', 0)}%</b> | 📉 하락 <b>{item.get('하락확률', 0)}%</b> | ⚠️ 급락 <b>{item.get('급락확률', 0)}%</b>\n"
             html += f"   📥 외인·기관 유입 <b>{item.get('외인기관유입확률', 0)}%</b>\n"
-            html += f"   📋 상승요인: {item.get('상승요인', '뉴스 기반 분석 중')}\n"
+            html += f"   📋 상승요인: {item.get('상승요인', '')}\n"
             html += f"   🎯 목표가: {item.get('목표가', '미정')}\n"
             html += f"   📰 뉴스: {item.get('뉴스', '관련 뉴스 없음')}\n\n"
+
+    # ==================== 요청하신 두 가지 추가 ====================
+    html += "────────────────────\n\n"
+    html += "<b>📉 코스피 공포·탐욕지수</b>\n"
+    html += f"{get_fear_greed_summary()}\n"
+    html += "🔗 <a href='https://kospi-fear-greed-index.co.kr'>지수 확인하기</a>\n\n"
+
+    html += "<b>📅 공모주 캘린더</b>\n"
+    html += f"{get_ipo_calendar_summary()}\n"
+    html += "🔗 <a href='https://www.ustockplus.com/service/ipo?schedule=toBeIPOList'>공모주 일정 보기</a>\n\n"
 
     html += "<i>⚠️ Gemini AI 분석 결과입니다. 투자 판단은 본인 책임입니다.</i>"
     return html

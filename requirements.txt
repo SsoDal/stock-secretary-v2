@@ -2,8 +2,8 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 pytz==2024.1
 feedparser==6.0.11
-lxml==5.1.0
+lxml==4.9.4                    # ← 5.1.0 → 4.9.4로 변경 (Render에서 가장 안정적)
 aiogram==3.13.0
 
-# Gemini SDK (Render에서 가장 안정적으로 설치되는 버전)
+# Gemini SDK (Render에서 가장 안정적인 버전)
 google-generativeai==0.8.4

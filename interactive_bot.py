@@ -15,6 +15,19 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
+# API 키 검증
+if not GEMINI_API_KEY:
+    logging.error("❌ GEMINI_API_KEY가 설정되지 않았습니다!")
+    logging.error("💡 Render Dashboard → Environment에서 GEMINI_API_KEY를 설정하세요.")
+    logging.error("🔗 https://aistudio.google.com/apikey 에서 API 키 발급")
+elif len(GEMINI_API_KEY) < 30:
+    logging.error(f"❌ GEMINI_API_KEY 길이가 너무 짧습니다: {len(GEMINI_API_KEY)}자")
+    logging.error(f"   현재 값: {GEMINI_API_KEY[:10]}... (앞 10자만 표시)")
+    logging.error("💡 올바른 형식: AIzaSy... (39-40자)")
+else:
+    logging.info(f"✅ GEMINI_API_KEY 설정됨 (길이: {len(GEMINI_API_KEY)}자)")
+    logging.info(f"   앞 10자: {GEMINI_API_KEY[:10]}...")
+
 genai.configure(api_key=GEMINI_API_KEY)
 
 # 폴백 모델 리스트 (구 SDK 호환)

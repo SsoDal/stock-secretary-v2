@@ -1,0 +1,7 @@
+# Render.com 전용 requirements (대화형 챗봇만)
+# 복잡한 의존성 제거, 최소한만 설치
+
+aiogram==3.13.0
+requests==2.32.3
+beautifulsoup4==4.12.3
+google-generativeai==0.8.4

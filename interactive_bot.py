@@ -16,7 +16,8 @@ bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# 구 SDK 호환 모델 (google-generativeai 0.8.4)
+model = genai.GenerativeModel('gemini-pro')
 
 # 강력한 헤더 (네이버 403 차단 방지)
 HEADERS = {

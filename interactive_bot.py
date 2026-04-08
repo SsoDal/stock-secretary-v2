@@ -16,8 +16,30 @@ bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
 genai.configure(api_key=GEMINI_API_KEY)
-# 구 SDK 호환 모델 (google-generativeai 0.8.4)
-model = genai.GenerativeModel('gemini-pro')
+
+# 폴백 모델 리스트 (구 SDK 호환)
+MODEL_NAMES = [
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+    'gemini-1.0-pro',
+    'gemini-pro'
+]
+
+# 사용 가능한 모델 찾기
+model = None
+for model_name in MODEL_NAMES:
+    try:
+        model = genai.GenerativeModel(model_name)
+        # 간단한 테스트로 모델 검증
+        logging.info(f"✅ Gemini 모델 사용: {model_name}")
+        break
+    except Exception as e:
+        logging.warning(f"⚠️ {model_name} 실패: {e}")
+        continue
+
+if model is None:
+    logging.error("❌ 사용 가능한 Gemini 모델 없음")
+    model = genai.GenerativeModel('gemini-1.5-flash')  # 기본값
 
 # 강력한 헤더 (네이버 403 차단 방지)
 HEADERS = {

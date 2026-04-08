@@ -5,10 +5,10 @@ feedparser==6.0.11
 lxml==5.1.0
 aiogram==3.13.0
 
-# Gemini SDK — google-generativeai (구 SDK지만 wheel이 잘 제공되어 Rust 빌드 회피)
+# Gemini SDK - Render에서 가장 안정적인 버전 (wheel 제공 잘 됨)
 google-generativeai==0.8.4
 
-# pydantic 관련 강제 pre-built wheel 사용 (Rust 빌드 방지)
-pydantic==2.10.6
-pydantic-core==2.27.2
+# pydantic 충돌 해결 + pre-built wheel 강제
+pydantic==2.8.2
+pydantic-core==2.23.4
 typing-extensions==4.12.2

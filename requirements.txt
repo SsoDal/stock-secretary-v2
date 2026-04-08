@@ -1,7 +1,7 @@
-google-genai==0.1.0
+google-generativeai==0.8.4
 requests
 beautifulsoup4
 pytz
 tenacity
 aiogram==3.13.0
-finance-datareader
+finance-datareader==0.9.50

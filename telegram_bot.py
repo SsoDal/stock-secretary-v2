@@ -5,14 +5,45 @@ from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 
 def send_telegram(html_message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    
+    # Telegram 메시지 길이 제한 (4096자)
+    MAX_LENGTH = 4000  # 안전 여유
+    if len(html_message) > MAX_LENGTH:
+        # 메시지를 여러 개로 분할
+        parts = []
+        current = ""
+        for line in html_message.split('\n'):
+            if len(current) + len(line) + 1 > MAX_LENGTH:
+                parts.append(current)
+                current = line + '\n'
+            else:
+                current += line + '\n'
+        if current:
+            parts.append(current)
+        
+        # 첫 번째 파트만 전송 (핵심 내용)
+        html_message = parts[0] + f"\n\n<i>... (총 {len(parts)}개 파트 중 1/1 - 전체 내용은 GitHub Actions 로그 참조)</i>"
+    
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": html_message,
         "parse_mode": "HTML",
         "disable_web_page_preview": True
     }
-    r = requests.post(url, json=payload, timeout=15)
-    r.raise_for_status()
+    
+    try:
+        r = requests.post(url, json=payload, timeout=15)
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        # 400 오류 시 상세 정보 출력
+        print(f"❌ Telegram 전송 실패: {e}")
+        print(f"응답 내용: {r.text}")
+        
+        # HTML 파싱 오류일 경우 플레인 텍스트로 재시도
+        payload["parse_mode"] = None
+        payload["text"] = html_message[:MAX_LENGTH]
+        r2 = requests.post(url, json=payload, timeout=15)
+        r2.raise_for_status()
 
 def send_error_telegram(error_message: str):
     try:

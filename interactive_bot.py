@@ -151,6 +151,8 @@ async def handle_message(message: types.Message):
 
         # 런타임에 모델 가져오기 및 폴백 시도
         result_text = None
+        last_error = None
+        
         for model_name in MODEL_NAMES:
             try:
                 logging.info(f"🔄 Gemini 모델 시도: {model_name}")
@@ -160,11 +162,17 @@ async def handle_message(message: types.Message):
                 logging.info(f"✅ 성공: {model_name}")
                 break
             except Exception as model_error:
-                logging.warning(f"⚠️ {model_name} 실패: {str(model_error)[:100]}")
+                error_msg = str(model_error)
+                logging.warning(f"⚠️ {model_name} 실패: {error_msg[:200]}")
+                last_error = error_msg
                 continue
         
         if result_text is None:
-            raise Exception("모든 Gemini 모델 사용 불가. API 키나 모델 가용성을 확인하세요.")
+            # API 키 문제인지 확인
+            if "API_KEY" in str(last_error).upper() or "INVALID" in str(last_error).upper():
+                raise Exception(f"❌ GEMINI_API_KEY 오류: {last_error[:200]}\n\n💡 Render Dashboard에서 환경 변수를 확인하세요.")
+            else:
+                raise Exception(f"모든 Gemini 모델 사용 불가.\n마지막 오류: {last_error[:300]}")
         
         # 3. 결과 전송
         await processing_msg.delete()

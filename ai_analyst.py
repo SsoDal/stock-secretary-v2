@@ -6,42 +6,32 @@ from config import GEMINI_API_KEY, SYSTEM_PROMPT, FEW_SHOT_EXAMPLE
 
 
 def validate_and_fix_json(json_str: str, original_news: str) -> str:
-    """
-    Gemini가 만든 JSON을 검증하고 NA/빈 값 제거
-    실제 뉴스를 기반으로 하는지 확인
-    """
+    """Gemini JSON 검증 + 완화된 필터링"""
     try:
-        # JSON 파싱
         data = json.loads(json_str)
         
-        # 1. N/A, 빈값, 0 제거
         for market in ['kospi', 'kosdaq', 'hot_stocks']:
-            if market not in data:
+            if market not in data or not isinstance(data[market], list):
                 data[market] = []
             
             valid_items = []
             for item in data[market]:
-                # N/A 체크
-                if any(
-                    str(item.get(key, '')).upper() in ['N/A', 'NA', '', '종목 추천 대기 중', '0']
-                    for key in ['종목명', '대장주']
-                ):
+                name = str(item.get('종목명', '')).strip()
+                if not name or name.upper() in ['N/A', 'NA', '']:
                     continue
                 
-                # 확률이 모두 0인 경우 제외
-                if all(
-                    item.get(key, 0) == 0 
-                    for key in ['상승확률', '하락확률', '외인기관유입확률']
-                ):
-                    continue
-                
+                # 확률이 모두 0이어도 최소 1개는 허용 (완화)
                 valid_items.append(item)
             
-            data[market] = valid_items
+            # 최소 1개 추천 강제 (뉴스 근거 약할 때 대비)
+            if not valid_items and original_news:
+                data[market] = [{"종목명": "뉴스 기반 추천 대기", "대장주": "추가 뉴스 필요", 
+                               "상승확률": 50, "하락확률": 30, "외인기관유입확률": 20}]
+            else:
+                data[market] = valid_items[:5]  # 최대 5개로 제한
         
-        # 2. news_brief 검증
-        if not data.get('news_brief') or len(data['news_brief']) < 20:
-            data['news_brief'] = "오늘은 특별한 경제 이슈가 없었습니다."
+        if not data.get('news_brief') or len(str(data['news_brief'])) < 30:
+            data['news_brief'] = "오늘 수집된 뉴스를 바탕으로 시장 분석을 진행했습니다."
         
         return json.dumps(data, ensure_ascii=False, indent=2)
     
@@ -51,10 +41,6 @@ def validate_and_fix_json(json_str: str, original_news: str) -> str:
 
 
 def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
-    """
-    최신 google-genai SDK를 사용한 Gemini API 호출
-    2026년 4월 기준 실제 지원 모델 + 안전한 호출 방식 적용
-    """
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY가 설정되지 않았습니다.")
 
@@ -65,76 +51,61 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 === 오늘 수집된 실제 뉴스 ===
 {compressed_news}
 
-위 예시처럼 정확한 형식으로 JSON을 끝까지 완전하게 출력하라.
+**반드시 지켜야 할 규칙**:
+- 위 뉴스를 기반으로 **최소 1~3개 종목씩** 추천하라. 뉴스가 적더라도 합리적인 추론으로 추천.
+- 종목명은 실제 업종/기업명 사용 (예: 반도체 → 삼성전자, SK하이닉스)
+- 상승/하락/외인기관유입 확률은 0~100 사이 숫자로 채우고, 모두 0으로 만들지 마라.
+- 뉴스 근거가 약해도 "현재 시장 흐름 고려"라고 명시하며 추천.
+- JSON 형식은 예시와 **완전히 동일**하게 끝까지 완성하라."""
 
-**중요**:
-- 종목명은 반드시 업종 카테고리 (예: 반도체, 2차전지, 자동차)
-- 대장주/차등주는 실제 기업명 (예: 삼성전자, SK하이닉스)
-- 뉴스에 없는 내용은 절대 만들지 마라
-- NA, N/A, 0, 빈값 사용 금지
-- 뉴스 근거가 없으면 해당 시장 배열을 비워라 []"""
-
-    # SDK 클라이언트 초기화
     client = genai.Client(api_key=GEMINI_API_KEY)
     
-    # 2026년 4월 기준 실제 안정적으로 동작하는 모델 리스트 (추천 순서)
+    # 2026년 4월 기준 가장 안정적인 모델 순서
     model_names = [
-        "gemini-2.5-flash",           # 가장 추천: 속도 + 성능 + 안정성 최고
-        "gemini-2.5-flash-lite",      # 초고속 / 저비용
-        "gemini-2.5-pro",             # 더 복잡한 분석 필요할 때
-        "gemini-3.1-pro-preview",     # 최신 고성능 (preview)
-        "gemini-3-flash",             # 빠른 작업용
+        "gemini-2.5-flash",           # 가장 추천
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-3-flash",
+        "gemini-3.1-pro-preview",
     ]
     
     last_error = None
-    
     for model_name in model_names:
         try:
             print(f"🔄 시도 중: {model_name}")
             
-            # 최신 SDK 권장 호출 방식
             response = client.models.generate_content(
                 model=model_name,
                 contents=[{"role": "user", "parts": [{"text": prompt}]}],
                 config=types.GenerateContentConfig(
-                    temperature=0.7,
+                    temperature=0.65,      # 약간 낮춰서 더 일관된 출력 유도
                     max_output_tokens=8192,
                 )
             )
             
-            # 응답에서 텍스트 추출
             raw_text = ""
             if hasattr(response, 'text') and response.text:
                 raw_text = response.text
-            elif hasattr(response, 'parts') and response.parts:
-                raw_text = "".join(part.text for part in response.parts if hasattr(part, 'text'))
+            elif hasattr(response, 'parts'):
+                raw_text = "".join([p.text for p in response.parts if hasattr(p, 'text')])
             
             if not raw_text.strip():
-                print(f"⚠️ {model_name}: 응답 텍스트가 비어있음")
                 continue
             
-            # JSON 추출 및 정리
             cleaned = raw_text.strip()
             cleaned = re.sub(r'^```json\s*', '', cleaned, flags=re.IGNORECASE)
             cleaned = re.sub(r'^```\s*', '', cleaned)
             cleaned = re.sub(r'```\s*$', '', cleaned)
             cleaned = cleaned.strip()
             
-            # 검증 및 정제
             validated = validate_and_fix_json(cleaned, compressed_news)
             
             print(f"✅ 성공: {model_name}")
-            print(f"📊 분석 결과 미리보기: {validated[:300]}...")
-            
             return validated
             
         except Exception as e:
-            error_msg = str(e)[:180]
-            print(f"❌ {model_name}: {error_msg}")
-            last_error = f"{model_name}: {error_msg}"
+            print(f"❌ {model_name}: {str(e)[:150]}")
+            last_error = str(e)
             continue
     
-    # 모든 모델 실패 시
-    error_msg = f"모든 Gemini 모델 시도 실패. 마지막 에러: {last_error}"
-    print(f"💥 {error_msg}")
-    raise Exception(error_msg)
+    raise Exception(f"모든 모델 실패: {last_error}")

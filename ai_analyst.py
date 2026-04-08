@@ -63,7 +63,6 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 
     genai.configure(api_key=GEMINI_API_KEY)
 
-    # 2026년 4월 현재 정상 작동하는 모델 순서
     models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
 
     for model_name in models:

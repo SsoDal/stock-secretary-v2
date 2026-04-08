@@ -1,9 +1,7 @@
-import google.generativeai as genai
+import requests
 import json
 import re
 from config import GEMINI_API_KEY, SYSTEM_PROMPT, FEW_SHOT_EXAMPLE
-
-genai.configure(api_key=GEMINI_API_KEY)
 
 def validate_and_fix_json(json_str: str, original_news: str) -> str:
     """
@@ -51,14 +49,14 @@ def validate_and_fix_json(json_str: str, original_news: str) -> str:
 
 def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
     """
-    실제 뉴스를 기반으로 Gemini 분석 수행 + 검증 로직 추가
+    REST API를 통해 직접 Gemini 호출 (v1 정식 API 사용)
     """
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY가 설정되지 않았습니다.")
 
-    # gemini-1.5-flash-latest는 v1 API에서 안정적으로 작동
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
-
+    # Gemini REST API v1 엔드포인트 (gemini-1.5-flash 사용)
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    
     prompt = f"""{SYSTEM_PROMPT}
 
 {FEW_SHOT_EXAMPLE}
@@ -75,9 +73,38 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 - NA, N/A, 0, 빈값 사용 금지
 - 뉴스 근거가 없으면 해당 시장 배열을 비워라 []"""
 
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": prompt
+            }]
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 8192,
+        }
+    }
+
     try:
-        response = model.generate_content(prompt)
-        raw_text = response.text
+        print(f"🔄 Gemini API 호출 중... (v1 REST API)")
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        
+        if response.status_code != 200:
+            error_msg = f"HTTP {response.status_code}: {response.text}"
+            print(f"❌ API 응답 에러: {error_msg}")
+            raise Exception(error_msg)
+        
+        result = response.json()
+        
+        # 응답에서 텍스트 추출
+        if 'candidates' not in result or len(result['candidates']) == 0:
+            raise Exception("Gemini 응답에 candidates가 없습니다")
+        
+        raw_text = result['candidates'][0]['content']['parts'][0]['text']
         
         # JSON 추출
         cleaned = raw_text.strip()
@@ -89,10 +116,14 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
         # 검증 및 정제
         validated = validate_and_fix_json(cleaned, compressed_news)
         
-        print("✅ Gemini 분석 성공 + 검증 완료")
+        print("✅ Gemini 분석 성공 + 검증 완료 (REST API v1)")
         print(f"📊 분석 결과 미리보기: {validated[:200]}...")
         
         return validated
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Gemini API 요청 실패: {e}")
+        raise e
     except Exception as e:
         print(f"❌ Gemini 호출 실패: {e}")
         raise e

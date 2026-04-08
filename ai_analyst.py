@@ -142,7 +142,8 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
                     generation_config=genai.GenerationConfig(
                         temperature=0.6,
                         max_output_tokens=2048
-                    )
+                    ),
+                    request_options={"timeout": 30}  # ⭐ 30초 timeout (무한 로딩 방지)
                 )
 
                 raw_text = extract_text_from_response(response)

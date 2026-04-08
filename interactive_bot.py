@@ -6,19 +6,16 @@ from aiogram import F
 import google.generativeai as genai
 from config import GEMINI_API_KEY, TELEGRAM_TOKEN
 
-# 로깅
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# Gemini 설정 (구식 SDK)
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash-lite')
 
 SYSTEM_PROMPT = """너는 증권가 최고 베테랑 애널리스트이자 투자전문가다.
 사용자가 말한 업종 또는 종목에 대해 실시간 데이터와 뉴스를 기반으로 분석하라.
-뉴스에 없는 내용은 절대 만들지 마라.
 
 답변은 반드시 아래 형식으로만 출력:
 📌 [업종/종목명]
@@ -39,17 +36,14 @@ async def cmd_start(message: types.Message):
 @dp.message(F.text)
 async def handle_message(message: types.Message):
     user_query = message.text.strip()
-    
     try:
         prompt = f"""{SYSTEM_PROMPT}
 
 사용자 질문: {user_query}"""
-
         response = model.generate_content(prompt)
         await message.answer(response.text, parse_mode="HTML")
-
     except Exception as e:
-        await message.answer(f"⚠️ 분석 중 오류가 발생했습니다.\n{e}")
+        await message.answer(f"⚠️ 분석 중 오류가 발생했습니다.")
 
 async def main():
     print("🤖 대화형 경제 비서 봇이 시작되었습니다.")

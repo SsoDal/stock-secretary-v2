@@ -56,7 +56,7 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY가 설정되지 않았습니다.")
 
-    model = genai.GenerativeModel('gemini-2.0-flash-exp')
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
     prompt = f"""{SYSTEM_PROMPT}
 

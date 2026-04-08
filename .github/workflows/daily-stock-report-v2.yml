@@ -26,6 +26,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run stock report
+        working-directory: ./stock-secretary-v2   # ← 서브폴더 지정 (중요!)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}

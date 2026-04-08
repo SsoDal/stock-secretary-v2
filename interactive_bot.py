@@ -25,21 +25,22 @@ MODEL_NAMES = [
     'gemini-pro'
 ]
 
-# 사용 가능한 모델 찾기
-model = None
-for model_name in MODEL_NAMES:
-    try:
-        model = genai.GenerativeModel(model_name)
-        # 간단한 테스트로 모델 검증
-        logging.info(f"✅ Gemini 모델 사용: {model_name}")
-        break
-    except Exception as e:
-        logging.warning(f"⚠️ {model_name} 실패: {e}")
-        continue
+def get_gemini_model():
+    """사용 가능한 Gemini 모델 찾기 (런타임에 실행)"""
+    # 직접 generate_content 호출 시 폴백
+    for model_name in MODEL_NAMES:
+        try:
+            logging.info(f"🔄 시도: {model_name}")
+            return genai.GenerativeModel(model_name)
+        except Exception as e:
+            logging.warning(f"⚠️ {model_name} 생성 실패: {str(e)[:100]}")
+            continue
+    
+    # 모든 모델 실패 시 마지막 시도
+    logging.error("❌ 모든 모델 실패, 기본 모델로 시도")
+    return genai.GenerativeModel('gemini-1.5-flash')
 
-if model is None:
-    logging.error("❌ 사용 가능한 Gemini 모델 없음")
-    model = genai.GenerativeModel('gemini-1.5-flash')  # 기본값
+# 전역 변수로 모델 저장하지 않음 (함수에서 호출할 때마다 생성)
 
 # 강력한 헤더 (네이버 403 차단 방지)
 HEADERS = {
@@ -148,8 +149,22 @@ async def handle_message(message: types.Message):
 
 위 뉴스만을 기반으로 분석하라. 뉴스에 없는 내용은 절대 만들지 마라."""
 
-        response = model.generate_content(prompt)
-        result_text = response.text
+        # 런타임에 모델 가져오기 및 폴백 시도
+        result_text = None
+        for model_name in MODEL_NAMES:
+            try:
+                logging.info(f"🔄 Gemini 모델 시도: {model_name}")
+                current_model = genai.GenerativeModel(model_name)
+                response = current_model.generate_content(prompt)
+                result_text = response.text
+                logging.info(f"✅ 성공: {model_name}")
+                break
+            except Exception as model_error:
+                logging.warning(f"⚠️ {model_name} 실패: {str(model_error)[:100]}")
+                continue
+        
+        if result_text is None:
+            raise Exception("모든 Gemini 모델 사용 불가. API 키나 모델 가용성을 확인하세요.")
         
         # 3. 결과 전송
         await processing_msg.delete()

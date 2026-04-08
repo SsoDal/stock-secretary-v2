@@ -5,9 +5,10 @@ feedparser==6.0.11
 lxml==5.1.0
 aiogram==3.13.0
 
-# Google Gemini SDK — 최신 버전으로 변경 (pydantic 의존성 문제 완화)
-google-genai>=0.8.0   # 또는 google-genai (버전 없이 최신)
+# Gemini SDK — google-generativeai (구 SDK지만 wheel이 잘 제공되어 Rust 빌드 회피)
+google-generativeai==0.8.4
 
-# pydantic-core 빌드 문제 방지용 pre-built wheel 강제
+# pydantic 관련 강제 pre-built wheel 사용 (Rust 빌드 방지)
 pydantic==2.10.6
 pydantic-core==2.27.2
+typing-extensions==4.12.2

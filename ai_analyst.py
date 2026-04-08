@@ -4,6 +4,7 @@ from google import genai
 from google.genai import types
 from config import GEMINI_API_KEY, SYSTEM_PROMPT, FEW_SHOT_EXAMPLE
 
+
 def validate_and_fix_json(json_str: str, original_news: str) -> str:
     """
     Gemini가 만든 JSON을 검증하고 NA/빈 값 제거
@@ -48,10 +49,11 @@ def validate_and_fix_json(json_str: str, original_news: str) -> str:
         print(f"⚠️ JSON 검증 실패: {e}")
         return json_str
 
+
 def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
     """
     최신 google-genai SDK를 사용한 Gemini API 호출
-    자동으로 사용 가능한 모델 탐지 및 폴백
+    2026년 4월 기준 실제 지원 모델 + 안전한 호출 방식 적용
     """
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY가 설정되지 않았습니다.")
@@ -72,19 +74,16 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 - NA, N/A, 0, 빈값 사용 금지
 - 뉴스 근거가 없으면 해당 시장 배열을 비워라 []"""
 
-    # 새로운 SDK 초기화
+    # SDK 클라이언트 초기화
     client = genai.Client(api_key=GEMINI_API_KEY)
     
-    # 시도할 모델 리스트
-    # Google AI Studio에서 확인된 실제 사용 가능한 모델명
-    # 참고: https://ai.google.dev/gemini-api/docs/models/gemini
+    # 2026년 4월 기준 실제 안정적으로 동작하는 모델 리스트 (추천 순서)
     model_names = [
-        "gemini-2.0-flash-exp",           # 2026 최신 실험 버전
-        "gemini-1.5-flash-8b",            # 경량 고속 모델
-        "gemini-1.5-flash",               # 표준 flash
-        "gemini-1.5-pro",                 # Pro 버전
-        "gemini-exp-1206",                # 실험 모델
-        "learnlm-1.5-pro-experimental",   # 학습 특화
+        "gemini-2.5-flash",           # 가장 추천: 속도 + 성능 + 안정성 최고
+        "gemini-2.5-flash-lite",      # 초고속 / 저비용
+        "gemini-2.5-pro",             # 더 복잡한 분석 필요할 때
+        "gemini-3.1-pro-preview",     # 최신 고성능 (preview)
+        "gemini-3-flash",             # 빠른 작업용
     ]
     
     last_error = None
@@ -93,24 +92,28 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
         try:
             print(f"🔄 시도 중: {model_name}")
             
-            # 모델 생성 및 호출
+            # 최신 SDK 권장 호출 방식
             response = client.models.generate_content(
                 model=model_name,
-                contents=prompt,
+                contents=[{"role": "user", "parts": [{"text": prompt}]}],
                 config=types.GenerateContentConfig(
                     temperature=0.7,
                     max_output_tokens=8192,
                 )
             )
             
-            # 응답 텍스트 추출
-            if not response or not response.text:
-                print(f"⚠️ {model_name}: 응답 없음")
+            # 응답에서 텍스트 추출
+            raw_text = ""
+            if hasattr(response, 'text') and response.text:
+                raw_text = response.text
+            elif hasattr(response, 'parts') and response.parts:
+                raw_text = "".join(part.text for part in response.parts if hasattr(part, 'text'))
+            
+            if not raw_text.strip():
+                print(f"⚠️ {model_name}: 응답 텍스트가 비어있음")
                 continue
             
-            raw_text = response.text
-            
-            # JSON 추출
+            # JSON 추출 및 정리
             cleaned = raw_text.strip()
             cleaned = re.sub(r'^```json\s*', '', cleaned, flags=re.IGNORECASE)
             cleaned = re.sub(r'^```\s*', '', cleaned)
@@ -121,17 +124,17 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
             validated = validate_and_fix_json(cleaned, compressed_news)
             
             print(f"✅ 성공: {model_name}")
-            print(f"📊 분석 결과 미리보기: {validated[:200]}...")
+            print(f"📊 분석 결과 미리보기: {validated[:300]}...")
             
             return validated
             
         except Exception as e:
-            error_msg = str(e)[:200]
+            error_msg = str(e)[:180]
             print(f"❌ {model_name}: {error_msg}")
             last_error = f"{model_name}: {error_msg}"
             continue
     
-    # 모든 시도 실패
+    # 모든 모델 실패 시
     error_msg = f"모든 Gemini 모델 시도 실패. 마지막 에러: {last_error}"
     print(f"💥 {error_msg}")
     raise Exception(error_msg)

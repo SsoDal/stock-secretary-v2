@@ -47,17 +47,40 @@ def validate_and_fix_json(json_str: str, original_news: str) -> str:
         print(f"⚠️ JSON 검증 실패: {e}")
         return json_str
 
+def try_gemini_request(api_version: str, model_name: str, prompt: str) -> dict:
+    """
+    특정 API 버전과 모델로 Gemini 요청 시도
+    """
+    url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+    
+    headers = {'Content-Type': 'application/json'}
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 8192,
+        }
+    }
+    
+    response = requests.post(url, headers=headers, json=payload, timeout=60)
+    return {
+        'status_code': response.status_code,
+        'data': response.json() if response.status_code == 200 else None,
+        'error': response.text if response.status_code != 200 else None
+    }
+
 def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
     """
-    REST API를 통해 직접 Gemini 호출 (v1 정식 API 사용)
+    다중 폴백 전략으로 Gemini API 호출
+    - v1beta 우선 시도 (최신 모델 지원)
+    - 여러 모델명 순차 시도 (2.0 → 1.5 → 1.0)
+    - v1으로 폴백
     """
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY가 설정되지 않았습니다.")
 
-    # Gemini REST API v1 엔드포인트 (gemini-1.5-pro 사용)
-    # gemini-1.5-flash는 v1 API에서 지원하지 않음
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
-    
     prompt = f"""{SYSTEM_PROMPT}
 
 {FEW_SHOT_EXAMPLE}
@@ -74,57 +97,69 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 - NA, N/A, 0, 빈값 사용 금지
 - 뉴스 근거가 없으면 해당 시장 배열을 비워라 []"""
 
-    headers = {
-        'Content-Type': 'application/json'
-    }
+    # 시도할 모델 리스트 (우선순위 순)
+    # 2026년 4월 기준: Gemini 2.0/2.5 시리즈가 주력
+    fallback_strategies = [
+        # v1beta 우선 (최신 모델 지원)
+        ("v1beta", "gemini-2.0-flash-exp"),         # 2026년 최신
+        ("v1beta", "gemini-1.5-flash"),             # 안정적
+        ("v1beta", "gemini-1.5-flash-latest"),      # alias
+        ("v1beta", "gemini-1.5-pro"),               # Pro 버전
+        ("v1beta", "gemini-1.5-pro-latest"),        # Pro alias
+        
+        # v1 폴백 (구버전 안정성)
+        ("v1", "gemini-1.5-flash"),
+        ("v1", "gemini-1.0-pro"),
+        ("v1", "gemini-pro"),
+    ]
     
-    payload = {
-        "contents": [{
-            "parts": [{
-                "text": prompt
-            }]
-        }],
-        "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 8192,
-        }
-    }
-
-    try:
-        print(f"🔄 Gemini API 호출 중... (v1 REST API)")
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        
-        if response.status_code != 200:
-            error_msg = f"HTTP {response.status_code}: {response.text}"
-            print(f"❌ API 응답 에러: {error_msg}")
-            raise Exception(error_msg)
-        
-        result = response.json()
-        
-        # 응답에서 텍스트 추출
-        if 'candidates' not in result or len(result['candidates']) == 0:
-            raise Exception("Gemini 응답에 candidates가 없습니다")
-        
-        raw_text = result['candidates'][0]['content']['parts'][0]['text']
-        
-        # JSON 추출
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r'^```json\s*', '', cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'```\s*$', '', cleaned)
-        cleaned = cleaned.strip()
-        
-        # 검증 및 정제
-        validated = validate_and_fix_json(cleaned, compressed_news)
-        
-        print("✅ Gemini 분석 성공 + 검증 완료 (REST API v1)")
-        print(f"📊 분석 결과 미리보기: {validated[:200]}...")
-        
-        return validated
-        
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Gemini API 요청 실패: {e}")
-        raise e
-    except Exception as e:
-        print(f"❌ Gemini 호출 실패: {e}")
-        raise e
+    last_error = None
+    
+    for api_version, model_name in fallback_strategies:
+        try:
+            print(f"🔄 시도 중: {api_version}/models/{model_name}")
+            
+            result = try_gemini_request(api_version, model_name, prompt)
+            
+            if result['status_code'] == 200 and result['data']:
+                # 성공!
+                candidates = result['data'].get('candidates', [])
+                if not candidates:
+                    print(f"⚠️ {model_name}: 응답에 candidates 없음")
+                    continue
+                
+                raw_text = candidates[0]['content']['parts'][0]['text']
+                
+                # JSON 추출
+                cleaned = raw_text.strip()
+                cleaned = re.sub(r'^```json\s*', '', cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(r'^```\s*', '', cleaned)
+                cleaned = re.sub(r'```\s*$', '', cleaned)
+                cleaned = cleaned.strip()
+                
+                # 검증 및 정제
+                validated = validate_and_fix_json(cleaned, compressed_news)
+                
+                print(f"✅ 성공: {api_version}/models/{model_name}")
+                print(f"📊 분석 결과 미리보기: {validated[:200]}...")
+                
+                return validated
+            else:
+                # 실패 로그
+                error_info = result['error'][:200] if result['error'] else 'Unknown error'
+                print(f"❌ {model_name}: HTTP {result['status_code']} - {error_info}")
+                last_error = f"{api_version}/{model_name}: {error_info}"
+                
+        except requests.exceptions.RequestException as e:
+            print(f"❌ {model_name} 네트워크 에러: {e}")
+            last_error = f"{api_version}/{model_name}: {str(e)}"
+            continue
+        except Exception as e:
+            print(f"❌ {model_name} 처리 에러: {e}")
+            last_error = f"{api_version}/{model_name}: {str(e)}"
+            continue
+    
+    # 모든 시도 실패
+    error_msg = f"모든 Gemini 모델 시도 실패. 마지막 에러: {last_error}"
+    print(f"💥 {error_msg}")
+    raise Exception(error_msg)

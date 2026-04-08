@@ -75,16 +75,16 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
     # 새로운 SDK 초기화
     client = genai.Client(api_key=GEMINI_API_KEY)
     
-    # 시도할 모델 리스트 (2026년 4월 기준)
+    # 시도할 모델 리스트
+    # Google AI Studio에서 확인된 실제 사용 가능한 모델명
+    # 참고: https://ai.google.dev/gemini-api/docs/models/gemini
     model_names = [
-        "gemini-2.0-flash-exp",
-        "gemini-1.5-flash-002",
-        "gemini-1.5-flash-001",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro-002",
-        "gemini-1.5-pro-001",
-        "gemini-1.5-pro",
-        "gemini-pro",
+        "gemini-2.0-flash-exp",           # 2026 최신 실험 버전
+        "gemini-1.5-flash-8b",            # 경량 고속 모델
+        "gemini-1.5-flash",               # 표준 flash
+        "gemini-1.5-pro",                 # Pro 버전
+        "gemini-exp-1206",                # 실험 모델
+        "learnlm-1.5-pro-experimental",   # 학습 특화
     ]
     
     last_error = None

@@ -54,8 +54,9 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY가 설정되지 않았습니다.")
 
-    # Gemini REST API v1 엔드포인트 (gemini-1.5-flash 사용)
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # Gemini REST API v1 엔드포인트 (gemini-1.5-pro 사용)
+    # gemini-1.5-flash는 v1 API에서 지원하지 않음
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
     
     prompt = f"""{SYSTEM_PROMPT}
 

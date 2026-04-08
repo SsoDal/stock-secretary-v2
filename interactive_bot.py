@@ -30,12 +30,14 @@ else:
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-# 폴백 모델 리스트 (구 SDK 호환)
+# 폴백 모델 리스트 (2024년 12월 이후 최신 모델명)
 MODEL_NAMES = [
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-1.0-pro',
-    'gemini-pro'
+    'gemini-1.5-flash-latest',  # v1 API 최신
+    'gemini-1.5-pro-latest',    # v1 API 최신
+    'gemini-1.5-flash',         # fallback
+    'gemini-1.5-pro',           # fallback
+    'models/gemini-1.5-flash',  # 전체 경로
+    'models/gemini-1.5-pro',    # 전체 경로
 ]
 
 def get_gemini_model():

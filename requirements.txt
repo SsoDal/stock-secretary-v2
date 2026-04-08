@@ -3,5 +3,11 @@ beautifulsoup4==4.12.3
 pytz==2024.1
 feedparser==6.0.11
 lxml==5.1.0
-google-genai==0.3.0
 aiogram==3.13.0
+
+# Google Gemini SDK — 최신 버전으로 변경 (pydantic 의존성 문제 완화)
+google-genai>=0.8.0   # 또는 google-genai (버전 없이 최신)
+
+# pydantic-core 빌드 문제 방지용 pre-built wheel 강제
+pydantic==2.10.6
+pydantic-core==2.27.2

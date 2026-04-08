@@ -1,4 +1,4 @@
-name: Daily Stock Report v2 (경제 비서)
+name: Daily Stock Report v2
 
 on:
   schedule:

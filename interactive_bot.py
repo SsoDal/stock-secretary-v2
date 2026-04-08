@@ -172,14 +172,38 @@ async def handle_message(message: types.Message):
             try:
                 logging.info(f"🔄 Gemini 모델 시도: {model_name}")
                 current_model = genai.GenerativeModel(model_name)
-                response = current_model.generate_content(prompt)
-                result_text = response.text
+                
+                # ✅ timeout 30초 추가 + max_output_tokens 제한
+                response = current_model.generate_content(
+                    prompt[:8000],  # 프롬프트 길이 제한
+                    generation_config={
+                        'temperature': 0.6,
+                        'max_output_tokens': 2048
+                    },
+                    request_options={'timeout': 30}  # 🔥 무한 로딩 방지
+                )
+                
+                # ✅ 안전한 텍스트 추출
+                if hasattr(response, 'text') and response.text:
+                    result_text = response.text
+                elif response.candidates and len(response.candidates) > 0:
+                    result_text = response.candidates[0].content.parts[0].text
+                else:
+                    raise Exception("빈 응답")
+                
                 logging.info(f"✅ 성공: {model_name}")
                 break
+                
             except Exception as model_error:
                 error_msg = str(model_error)
                 logging.warning(f"⚠️ {model_name} 실패: {error_msg[:200]}")
                 last_error = error_msg
+                
+                # 429 에러(할당량 초과)일 경우 잠시 대기
+                if "429" in error_msg or "quota" in error_msg.lower():
+                    logging.warning("⏳ 할당량 초과, 10초 대기 후 재시도...")
+                    await asyncio.sleep(10)
+                
                 continue
         
         if result_text is None:

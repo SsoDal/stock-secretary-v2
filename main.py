@@ -34,6 +34,10 @@ def main():
         korean_news = get_korean_news()
         us_news = get_us_news()
         compressed = compress_news(korean_news, us_news)
+        
+        print(f"📰 수집된 한국 뉴스: {len(korean_news)}개")
+        print(f"🇺🇸 수집된 미국 뉴스: {len(us_news)}개")
+        print(f"📊 압축된 뉴스 길이: {len(compressed)} 문자")
 
         recommendation_text = analyze_with_gemini(compressed, mode)
         html_msg = format_to_html(recommendation_text, mode)

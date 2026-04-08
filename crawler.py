@@ -12,9 +12,11 @@ HEADERS = {
 }
 
 def get_korean_news() -> List[Dict]:
-    """네이버 경제 뉴스 수집 (403 차단 방지 강화)"""
+    """네이버 경제 뉴스 수집 (403 차단 방지 강화 + 다양한 카테고리)"""
     urls = [
-        "https://search.naver.com/search.naver?where=news&query=%EA%B2%BD%EC%A0%9C&sm=tab_opt&sort=0",
+        "https://search.naver.com/search.naver?where=news&query=%EC%A6%9D%EC%8B%9C&sm=tab_opt&sort=0",  # 증시
+        "https://search.naver.com/search.naver?where=news&query=%EC%82%BC%EC%84%B1%EC%A0%84%EC%9E%90&sm=tab_opt&sort=0",  # 삼성전자
+        "https://search.naver.com/search.naver?where=news&query=%EB%B0%98%EB%8F%84%EC%B2%B4&sm=tab_opt&sort=0",  # 반도체
         "https://news.naver.com/main/list.naver?mode=LSD&mid=sec&sid1=101"
     ]
     
@@ -31,7 +33,7 @@ def get_korean_news() -> List[Dict]:
                         soup.select("li.bx") or 
                         soup.select(".list_body ul li"))
                 
-                for item in items[:10]:
+                for item in items[:15]:
                     title_tag = (item.select_one("a.news_tit") or 
                                 item.select_one(".news_tit a") or 
                                 item.select_one("dt a"))

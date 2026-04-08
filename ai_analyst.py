@@ -6,6 +6,7 @@ from config import GEMINI_API_KEY, SYSTEM_PROMPT, FEW_SHOT_EXAMPLE
 
 
 def validate_and_fix_json(json_str: str, original_news: str) -> str:
+    """JSON 검증 + 정확히 5개 종목 강제 + 확률 현실성 보정"""
     try:
         data = json.loads(json_str)
         
@@ -26,7 +27,7 @@ def validate_and_fix_json(json_str: str, original_news: str) -> str:
                 
                 valid_items.append(item)
             
-            # 정확히 5개로 맞춤 (모자라면 더미 추가)
+            # 정확히 5개로 맞춤
             while len(valid_items) < 5:
                 valid_items.append({
                     "종목명": "추가 뉴스 기반 추천 대기",
@@ -35,7 +36,8 @@ def validate_and_fix_json(json_str: str, original_news: str) -> str:
                     "하락확률": 32,
                     "외인기관유입확률": 35
                 })
-            data[market] = valid_items[:5]
+            
+            data[market] = valid_items[:5]   # 최대 5개
         
         if not data.get('news_brief') or len(str(data.get('news_brief', ''))) < 30:
             data['news_brief'] = "오늘 수집된 실시간 뉴스를 기반으로 분석했습니다."
@@ -57,15 +59,15 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 === 오늘 수집된 실제 뉴스 ===
 {compressed_news}
 
-**엄격 규칙**:
-- kospi, kosdaq, hot_stocks 각각 **정확히 5개 종목** 추천
+**엄격한 규칙**:
+- kospi, kosdaq, hot_stocks 각각 **정확히 5개 종목**만 추천
 - 확률(상승/하락/외인기관유입)은 최근 실시간 뉴스와 시장 흐름을 기반으로 **현실적으로 유추**해서 작성
-- 임의 숫자 만들지 말고, 뉴스 근거가 약하면 확률을 보수적으로 낮게 설정
-- JSON 형식은 예시와 완전히 동일하게 출력"""
+- 뉴스 근거가 약하면 확률을 보수적으로 낮게 설정
+- JSON 형식은 예시와 완전히 동일하게 끝까지 출력"""
 
     genai.configure(api_key=GEMINI_API_KEY)
 
-    # quota 제한이 상대적으로 덜한 모델 순서
+    # 2026년 4월 기준 가장 안정적인 모델 순서
     models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
 
     for model_name in models:
@@ -92,13 +94,14 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
                 return validated
                 
             except Exception as e:
-                if "429" in str(e) or "quota" in str(e).lower():
-                    wait = 60
+                error_str = str(e)
+                if "429" in error_str or "quota" in error_str.lower():
+                    wait = 65
                     print(f"⚠️ 쿼터 초과 → {wait}초 대기 후 재시도...")
                     time.sleep(wait)
                     continue
                 else:
-                    print(f"❌ {model_name} 오류: {str(e)[:150]}")
+                    print(f"❌ {model_name} 오류: {error_str[:150]}")
                     break
         time.sleep(3)
 

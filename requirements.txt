@@ -5,3 +5,7 @@ feedparser==6.0.11
 lxml                    # 버전 없이 적음 (Render에서 가장 안정적으로 설치됨)
 aiogram==3.13.0
 google-generativeai==0.8.4
+# ... (기존에 있던 다른 패키지들은 그대로 두세요)
+
+feedparser>=6.0.11          # ← 이 줄로 변경 또는 추가 (sgmllib3k 의존성 제거)
+sgmllib3k==1.0.0            # ← 안전하게 같이 추가 (fallback)

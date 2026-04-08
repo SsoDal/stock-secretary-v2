@@ -3,22 +3,21 @@ import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram import F
-from google import genai
-from google.genai.types import GenerateContentConfig
-import FinanceDataReader as fdr
-import requests
-from bs4 import BeautifulSoup
+import google.generativeai as genai
 from config import GEMINI_API_KEY, TELEGRAM_TOKEN
 
-# 로깅 설정
+# 로깅
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
-client = genai.Client(api_key=GEMINI_API_KEY)
 
-SYSTEM_PROMPT_INTERACTIVE = """너는 증권가 최고 베테랑 애널리스트이자 투자전문가다.
-사용자가 말한 업종 또는 종목에 대해 **실제 실시간 데이터**를 바탕으로 분석하라.
+# Gemini 설정 (구식 SDK)
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-2.5-flash-lite')
+
+SYSTEM_PROMPT = """너는 증권가 최고 베테랑 애널리스트이자 투자전문가다.
+사용자가 말한 업종 또는 종목에 대해 실시간 데이터와 뉴스를 기반으로 분석하라.
 뉴스에 없는 내용은 절대 만들지 마라.
 
 답변은 반드시 아래 형식으로만 출력:
@@ -42,22 +41,11 @@ async def handle_message(message: types.Message):
     user_query = message.text.strip()
     
     try:
-        # 실시간 데이터 가져오기 (간단 예시)
-        # 실제로는 FinanceDataReader + 크롤링으로 확장 가능
-        prompt = f"""{SYSTEM_PROMPT_INTERACTIVE}
+        prompt = f"""{SYSTEM_PROMPT}
 
-사용자 질문: {user_query}
-현재 실시간 뉴스와 주가 데이터를 바탕으로 분석해 주세요."""
+사용자 질문: {user_query}"""
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=prompt,
-            config=GenerateContentConfig(
-                temperature=0.2,
-                max_output_tokens=2048
-            )
-        )
-
+        response = model.generate_content(prompt)
         await message.answer(response.text, parse_mode="HTML")
 
     except Exception as e:

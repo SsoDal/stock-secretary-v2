@@ -5,6 +5,9 @@ import google.generativeai as genai
 from config import GEMINI_API_KEY, SYSTEM_PROMPT, FEW_SHOT_EXAMPLE
 
 
+# -----------------------------
+# JSON 검증 및 보정
+# -----------------------------
 def validate_and_fix_json(json_str: str, original_news: str) -> str:
     try:
         data = json.loads(json_str)
@@ -45,26 +48,52 @@ def validate_and_fix_json(json_str: str, original_news: str) -> str:
         return json_str
 
 
+# -----------------------------
+# Gemini 응답 안전 추출
+# -----------------------------
+def extract_text_from_response(response):
+    try:
+        if hasattr(response, "text") and response.text:
+            return response.text.strip()
+
+        if hasattr(response, "candidates"):
+            parts = []
+            for cand in response.candidates:
+                if hasattr(cand, "content") and cand.content.parts:
+                    for part in cand.content.parts:
+                        if hasattr(part, "text"):
+                            parts.append(part.text)
+
+            return "\n".join(parts).strip()
+
+        return ""
+
+    except Exception as e:
+        print("❌ 응답 파싱 실패:", e)
+        return ""
+
+
+# -----------------------------
+# 사용 가능한 모델 가져오기
+# -----------------------------
 def get_available_models():
-    """현재 사용 가능한 Gemini 모델 자동 탐색"""
     try:
         models = []
         for m in genai.list_models():
-            name = m.name
-
-            # generateContent 지원 모델만 필터링
             if "generateContent" in m.supported_generation_methods:
-                if "gemini" in name:
-                    models.append(name)
-
+                if "gemini" in m.name:
+                    models.append(m.name)
         return models
-
     except Exception as e:
-        print("❌ 모델 목록 조회 실패:", e)
+        print("❌ 모델 조회 실패:", e)
         return []
 
 
+# -----------------------------
+# 메인 분석 함수
+# -----------------------------
 def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
+
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY가 설정되지 않았습니다.")
 
@@ -77,33 +106,34 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 === 오늘 수집된 실제 뉴스 ===
 {compressed_news}
 
-**엄격한 규칙**:
-- kospi, kosdaq, hot_stocks 각각 정확히 5개 종목 추천
-- 확률은 최근 실시간 뉴스와 시장 흐름을 기반으로 현실적으로 유추
-- JSON 형식은 예시와 완전히 동일하게 출력"""
+[규칙]
+- kospi, kosdaq, hot_stocks 각각 5개
+- 확률은 현실적으로 계산
+- 반드시 JSON만 출력
+"""
 
-    # 🔥 핵심: 실제 사용 가능한 모델 가져오기
+    # 🔥 토큰 폭발 방지
+    prompt = prompt[:12000]
+
     available_models = get_available_models()
 
-    if not available_models:
-        raise Exception("사용 가능한 Gemini 모델이 없습니다.")
-
-    print("📦 사용 가능 모델:", available_models)
-
-    # 🔥 우선순위 설정 (flash → pro 순)
-    priority_models = [
-        m for m in available_models if "flash" in m
-    ] + [
-        m for m in available_models if "pro" in m
+    # 🔥 fallback 모델 강제 추가 (중요)
+    fallback_models = [
+        "models/gemini-1.5-flash",
+        "models/gemini-1.5-pro"
     ]
 
-    # 중복 제거
-    models = list(dict.fromkeys(priority_models))
+    models = list(dict.fromkeys(available_models + fallback_models))
+
+    if not models:
+        raise Exception("사용 가능한 모델 없음")
+
+    print("📦 모델 목록:", models)
 
     for model_name in models:
-        for attempt in range(4):
+        for attempt in range(3):
             try:
-                print(f"🔄 시도 중: {model_name} (시도 {attempt+1}/4)")
+                print(f"🔄 {model_name} 시도 {attempt+1}/3")
 
                 model = genai.GenerativeModel(model_name)
 
@@ -111,11 +141,14 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
                     prompt,
                     generation_config=genai.GenerationConfig(
                         temperature=0.6,
-                        max_output_tokens=8192,
+                        max_output_tokens=2048
                     )
                 )
 
-                raw_text = response.text.strip()
+                raw_text = extract_text_from_response(response)
+
+                if not raw_text:
+                    raise Exception("빈 응답")
 
                 # 코드블록 제거
                 cleaned = re.sub(r'^```json\s*', '', raw_text, flags=re.IGNORECASE)
@@ -128,19 +161,19 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
                 return validated
 
             except Exception as e:
-                error_str = str(e)
+                err = str(e)
 
-                if "429" in error_str or "quota" in error_str.lower():
-                    print(f"⚠️ 쿼터 초과 → 65초 대기...")
-                    time.sleep(65)
+                if "429" in err or "quota" in err.lower():
+                    print("⚠️ 쿼터 초과 → 60초 대기")
+                    time.sleep(60)
                     continue
 
-                elif "404" in error_str:
+                elif "404" in err:
                     print(f"❌ 모델 없음: {model_name}")
                     break
 
                 else:
-                    print(f"❌ 기타 오류: {model_name} → {e}")
+                    print(f"❌ 실패: {model_name} → {err}")
                     break
 
         time.sleep(2)

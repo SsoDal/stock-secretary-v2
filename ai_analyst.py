@@ -35,16 +35,9 @@ def validate_and_fix_json(json_str: str) -> str:
                 if not (0 <= up <= 100 and 0 <= down <= 100 and 0 <= flow <= 100):
                     continue
 
-                item['상승확률'] = up
-                item['하락확률'] = down
-                item['외인기관유입확률'] = flow
-
                 valid_items.append(item)
 
             data[market] = valid_items
-
-        if not data.get('news_brief') or len(str(data.get('news_brief'))) < 30:
-            data['news_brief'] = "뉴스 기반 분석 결과 유효한 종목만 선별되었습니다."
 
         return json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -72,7 +65,6 @@ def extract_text(response):
 
 
 def analyze_with_gemini(compressed_news: str, mode: str = "full"):
-    """🔥 mode 파라미터 다시 추가해서 기존 코드와 호환"""
 
     if not GEMINI_API_KEY:
         raise Exception("API KEY 없음")
@@ -92,25 +84,28 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full"):
 [절대 규칙]
 - 뉴스 없는 종목 절대 생성 금지
 - 확률은 반드시 뉴스 근거 기반
-- 모르면 종목 생성하지 말 것
 - JSON만 출력
 """
 
+    # 🔥 v1beta에서도 무조건 되는 모델들
     models = [
-        "models/gemini-1.5-flash",
-        "models/gemini-1.5-pro"
+        "gemini-pro",              # 구버전 핵심
+        "gemini-1.0-pro",         # 일부 환경
+        "models/gemini-pro",      # fallback
     ]
 
     for model_name in models:
         for _ in range(3):
             try:
+                print(f"🔄 시도: {model_name}")
+
                 model = genai.GenerativeModel(model_name)
 
                 res = model.generate_content(
                     prompt,
                     generation_config=genai.GenerationConfig(
                         temperature=0.3,
-                        max_output_tokens=4096
+                        max_output_tokens=2048
                     )
                 )
 
@@ -122,10 +117,11 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full"):
                 text = re.sub(r'^```json\s*', '', text)
                 text = re.sub(r'```$', '', text).strip()
 
+                print(f"✅ 성공: {model_name}")
                 return validate_and_fix_json(text)
 
             except Exception as e:
-                print("❌ 실패:", model_name, e)
+                print(f"❌ 실패: {model_name} → {e}")
                 time.sleep(2)
 
-    raise Exception("Gemini 실패")
+    raise Exception("Gemini 모든 모델 실패")

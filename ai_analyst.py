@@ -5,9 +5,6 @@ import google.generativeai as genai
 from config import GEMINI_API_KEY, SYSTEM_PROMPT, FEW_SHOT_EXAMPLE
 
 
-# -----------------------------
-# JSON 검증 (실전형)
-# -----------------------------
 def validate_and_fix_json(json_str: str) -> str:
     try:
         data = json.loads(json_str)
@@ -22,7 +19,6 @@ def validate_and_fix_json(json_str: str) -> str:
                 name = str(item.get('종목명', '')).strip()
                 news = str(item.get('뉴스', '')).strip()
 
-                # 🔥 핵심: 뉴스 없는 종목 제거
                 if not name or not news or news in ["없음", "관련 뉴스 없음"]:
                     continue
 
@@ -33,7 +29,6 @@ def validate_and_fix_json(json_str: str) -> str:
                 except:
                     continue
 
-                # 🔥 확률 sanity check
                 if up + down == 0:
                     continue
 
@@ -46,10 +41,8 @@ def validate_and_fix_json(json_str: str) -> str:
 
                 valid_items.append(item)
 
-            # ❌ 더미 채우기 제거
             data[market] = valid_items
 
-        # news_brief 최소 보정
         if not data.get('news_brief') or len(str(data.get('news_brief'))) < 30:
             data['news_brief'] = "뉴스 기반 분석 결과 유효한 종목만 선별되었습니다."
 
@@ -60,9 +53,6 @@ def validate_and_fix_json(json_str: str) -> str:
         return json_str
 
 
-# -----------------------------
-# 응답 파싱
-# -----------------------------
 def extract_text(response):
     try:
         if hasattr(response, "text") and response.text:
@@ -81,17 +71,14 @@ def extract_text(response):
         return ""
 
 
-# -----------------------------
-# 메인 함수
-# -----------------------------
-def analyze_with_gemini(compressed_news: str) -> str:
+def analyze_with_gemini(compressed_news: str, mode: str = "full"):
+    """🔥 mode 파라미터 다시 추가해서 기존 코드와 호환"""
 
     if not GEMINI_API_KEY:
         raise Exception("API KEY 없음")
 
     genai.configure(api_key=GEMINI_API_KEY)
 
-    # 🔥 뉴스만 제한
     compressed_news = compressed_news[:8000]
 
     prompt = f"""
@@ -122,7 +109,7 @@ def analyze_with_gemini(compressed_news: str) -> str:
                 res = model.generate_content(
                     prompt,
                     generation_config=genai.GenerationConfig(
-                        temperature=0.3,  # 🔥 랜덤성 낮춤
+                        temperature=0.3,
                         max_output_tokens=4096
                     )
                 )

@@ -99,6 +99,9 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 
     genai.configure(api_key=GEMINI_API_KEY)
 
+    # 🔥 뉴스만 제한 (전체 프롬프트 자르지 않음)
+    compressed_news = compressed_news[:8000]
+
     prompt = f"""{SYSTEM_PROMPT}
 
 {FEW_SHOT_EXAMPLE}
@@ -106,18 +109,15 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
 === 오늘 수집된 실제 뉴스 ===
 {compressed_news}
 
-[규칙]
-- kospi, kosdaq, hot_stocks 각각 5개
-- 확률은 현실적으로 계산
-- 반드시 JSON만 출력
+[출력 규칙]
+- 반드시 JSON만 출력 (설명 금지)
+- kospi, kosdaq, hot_stocks 각각 5개 종목
+- news_brief는 자연스럽고 충분히 길게 작성
+- JSON 구조는 예시와 완전히 동일
 """
-
-    # 🔥 토큰 폭발 방지
-    prompt = prompt[:12000]
 
     available_models = get_available_models()
 
-    # 🔥 fallback 모델 강제 추가 (중요)
     fallback_models = [
         "models/gemini-1.5-flash",
         "models/gemini-1.5-pro"
@@ -141,9 +141,8 @@ def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
                     prompt,
                     generation_config=genai.GenerationConfig(
                         temperature=0.6,
-                        max_output_tokens=2048
-                    ),
-                    request_options={"timeout": 30}  # ⭐ 30초 timeout (무한 로딩 방지)
+                        max_output_tokens=4096  # 🔥 출력 잘림 방지
+                    )
                 )
 
                 raw_text = extract_text_from_response(response)

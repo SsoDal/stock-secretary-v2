@@ -6,9 +6,9 @@ from config import GEMINI_API_KEY, SYSTEM_PROMPT, FEW_SHOT_EXAMPLE
 
 
 # -----------------------------
-# JSON 검증 및 보정
+# JSON 검증 (실전형)
 # -----------------------------
-def validate_and_fix_json(json_str: str, original_news: str) -> str:
+def validate_and_fix_json(json_str: str) -> str:
     try:
         data = json.loads(json_str)
 
@@ -17,165 +17,128 @@ def validate_and_fix_json(json_str: str, original_news: str) -> str:
                 data[market] = []
 
             valid_items = []
+
             for item in data[market]:
                 name = str(item.get('종목명', '')).strip()
-                if not name or name.upper() in ['N/A', 'NA', '']:
+                news = str(item.get('뉴스', '')).strip()
+
+                # 🔥 핵심: 뉴스 없는 종목 제거
+                if not name or not news or news in ["없음", "관련 뉴스 없음"]:
                     continue
 
-                item['상승확률'] = max(0, min(100, int(item.get('상승확률', 50))))
-                item['하락확률'] = max(0, min(100, int(item.get('하락확률', 30))))
-                item['외인기관유입확률'] = max(0, min(100, int(item.get('외인기관유입확률', 30))))
+                try:
+                    up = int(item.get('상승확률', 0))
+                    down = int(item.get('하락확률', 0))
+                    flow = int(item.get('외인기관유입확률', 0))
+                except:
+                    continue
+
+                # 🔥 확률 sanity check
+                if up + down == 0:
+                    continue
+
+                if not (0 <= up <= 100 and 0 <= down <= 100 and 0 <= flow <= 100):
+                    continue
+
+                item['상승확률'] = up
+                item['하락확률'] = down
+                item['외인기관유입확률'] = flow
 
                 valid_items.append(item)
 
-            while len(valid_items) < 5:
-                valid_items.append({
-                    "종목명": "추가 뉴스 기반 추천 대기",
-                    "대장주": "시장 상황 확인 필요",
-                    "상승확률": 48,
-                    "하락확률": 32,
-                    "외인기관유입확률": 35
-                })
+            # ❌ 더미 채우기 제거
+            data[market] = valid_items
 
-            data[market] = valid_items[:5]
-
-        if not data.get('news_brief') or len(str(data.get('news_brief', ''))) < 30:
-            data['news_brief'] = "오늘 수집된 실시간 뉴스를 기반으로 분석했습니다."
+        # news_brief 최소 보정
+        if not data.get('news_brief') or len(str(data.get('news_brief'))) < 30:
+            data['news_brief'] = "뉴스 기반 분석 결과 유효한 종목만 선별되었습니다."
 
         return json.dumps(data, ensure_ascii=False, indent=2)
 
-    except Exception:
+    except Exception as e:
+        print("❌ JSON 검증 실패:", e)
         return json_str
 
 
 # -----------------------------
-# Gemini 응답 안전 추출
+# 응답 파싱
 # -----------------------------
-def extract_text_from_response(response):
+def extract_text(response):
     try:
         if hasattr(response, "text") and response.text:
             return response.text.strip()
 
         if hasattr(response, "candidates"):
-            parts = []
-            for cand in response.candidates:
-                if hasattr(cand, "content") and cand.content.parts:
-                    for part in cand.content.parts:
-                        if hasattr(part, "text"):
-                            parts.append(part.text)
-
-            return "\n".join(parts).strip()
+            texts = []
+            for c in response.candidates:
+                for p in c.content.parts:
+                    if hasattr(p, "text"):
+                        texts.append(p.text)
+            return "\n".join(texts)
 
         return ""
-
-    except Exception as e:
-        print("❌ 응답 파싱 실패:", e)
+    except:
         return ""
 
 
 # -----------------------------
-# 사용 가능한 모델 가져오기
+# 메인 함수
 # -----------------------------
-def get_available_models():
-    try:
-        models = []
-        for m in genai.list_models():
-            if "generateContent" in m.supported_generation_methods:
-                if "gemini" in m.name:
-                    models.append(m.name)
-        return models
-    except Exception as e:
-        print("❌ 모델 조회 실패:", e)
-        return []
-
-
-# -----------------------------
-# 메인 분석 함수
-# -----------------------------
-def analyze_with_gemini(compressed_news: str, mode: str = "full") -> str:
+def analyze_with_gemini(compressed_news: str) -> str:
 
     if not GEMINI_API_KEY:
-        raise Exception("GEMINI_API_KEY가 설정되지 않았습니다.")
+        raise Exception("API KEY 없음")
 
     genai.configure(api_key=GEMINI_API_KEY)
 
-    # 🔥 뉴스만 제한 (전체 프롬프트 자르지 않음)
+    # 🔥 뉴스만 제한
     compressed_news = compressed_news[:8000]
 
-    prompt = f"""{SYSTEM_PROMPT}
+    prompt = f"""
+{SYSTEM_PROMPT}
 
 {FEW_SHOT_EXAMPLE}
 
-=== 오늘 수집된 실제 뉴스 ===
+=== 뉴스 ===
 {compressed_news}
 
-[출력 규칙]
-- 반드시 JSON만 출력 (설명 금지)
-- kospi, kosdaq, hot_stocks 각각 5개 종목
-- news_brief는 자연스럽고 충분히 길게 작성
-- JSON 구조는 예시와 완전히 동일
+[절대 규칙]
+- 뉴스 없는 종목 절대 생성 금지
+- 확률은 반드시 뉴스 근거 기반
+- 모르면 종목 생성하지 말 것
+- JSON만 출력
 """
 
-    available_models = get_available_models()
-
-    fallback_models = [
+    models = [
         "models/gemini-1.5-flash",
         "models/gemini-1.5-pro"
     ]
 
-    models = list(dict.fromkeys(available_models + fallback_models))
-
-    if not models:
-        raise Exception("사용 가능한 모델 없음")
-
-    print("📦 모델 목록:", models)
-
     for model_name in models:
-        for attempt in range(3):
+        for _ in range(3):
             try:
-                print(f"🔄 {model_name} 시도 {attempt+1}/3")
-
                 model = genai.GenerativeModel(model_name)
 
-                response = model.generate_content(
+                res = model.generate_content(
                     prompt,
                     generation_config=genai.GenerationConfig(
-                        temperature=0.6,
-                        max_output_tokens=4096  # 🔥 출력 잘림 방지
+                        temperature=0.3,  # 🔥 랜덤성 낮춤
+                        max_output_tokens=4096
                     )
                 )
 
-                raw_text = extract_text_from_response(response)
+                text = extract_text(res)
 
-                if not raw_text:
+                if not text:
                     raise Exception("빈 응답")
 
-                # 코드블록 제거
-                cleaned = re.sub(r'^```json\s*', '', raw_text, flags=re.IGNORECASE)
-                cleaned = re.sub(r'^```\s*', '', cleaned)
-                cleaned = re.sub(r'```\s*$', '', cleaned).strip()
+                text = re.sub(r'^```json\s*', '', text)
+                text = re.sub(r'```$', '', text).strip()
 
-                validated = validate_and_fix_json(cleaned, compressed_news)
-
-                print(f"✅ 성공: {model_name}")
-                return validated
+                return validate_and_fix_json(text)
 
             except Exception as e:
-                err = str(e)
+                print("❌ 실패:", model_name, e)
+                time.sleep(2)
 
-                if "429" in err or "quota" in err.lower():
-                    print("⚠️ 쿼터 초과 → 60초 대기")
-                    time.sleep(60)
-                    continue
-
-                elif "404" in err:
-                    print(f"❌ 모델 없음: {model_name}")
-                    break
-
-                else:
-                    print(f"❌ 실패: {model_name} → {err}")
-                    break
-
-        time.sleep(2)
-
-    raise Exception("Gemini API 최종 실패")
+    raise Exception("Gemini 실패")
